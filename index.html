@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SynthScale AI | Intelligent Auto-Scaling</title>
+    <title>SynthScale AI | Enterprise v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -18,125 +18,84 @@
         function SynthScaleApp() {
             const [darkMode, setDarkMode] = useState(true);
             const [targetMass, setTargetMass] = useState(500); // mg
-            const [expectedYield, setExpectedYield] = useState(85); // %
+            const [expectedYield, setExpectedYield] = useState(85.0); // %
             const [productMW, setProductMW] = useState(350.5); // g/mol
-            const [isPredicting, setIsPredicting] = useState(false);
             
-            // Simulated reagents with live inventory data (inStockMg)
+            const [isPredicting, setIsPredicting] = useState(false);
+            const [mlInsights, setMlInsights] = useState(null);
+            
+            const [isExporting, setIsExporting] = useState(false);
+            const [exportToken, setExportToken] = useState(null);
+            
+            // Added 'daysOpen' to demonstrate the reagent degradation ML variable
             const [reagents, setReagents] = useState([
-                { id: 1, name: 'Aryl Halide (Substrate A)', mw: 156.0, eq: 1.0, inStockMg: 1200 },
-                { id: 2, name: 'Boronic Acid (Substrate B)', mw: 121.9, eq: 1.2, inStockMg: 450 }, // Low stock simulation
-                { id: 3, name: 'Pd(dppf)Cl2 Catalyst', mw: 731.5, eq: 0.05, inStockMg: 5000 }
+                { id: 1, name: 'Aryl Halide (Substrate A)', mw: 156.0, eq: 1.0, inStockMg: 1200, daysOpen: 12 },
+                { id: 2, name: 'Boronic Acid (Substrate B)', mw: 121.9, eq: 1.2, inStockMg: 450, daysOpen: 45 },
+                { id: 3, name: 'Pd(dppf)Cl2 Catalyst', mw: 731.5, eq: 0.05, inStockMg: 5000, daysOpen: 142 } // Heavily degraded
             ]);
 
             useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); }, [darkMode]);
 
-            // Core Logic
             const targetMoles = (targetMass / (expectedYield / 100)) / productMW;
 
-            const simulateELNPrediction = () => {
+            const predictYield = () => {
                 setIsPredicting(true);
+                setMlInsights(null);
+                setExportToken(null);
+                
                 setTimeout(() => {
-                    setExpectedYield(62.5); // Historically lower average yield
+                    let baseYield = 85.0;
+                    let degradationPenalty = 0;
+                    let scalePenalty = 0;
+
+                    // 1. Context-Aware Reagent Degradation
+                    const oldCatalyst = reagents.find(r => r.name.includes('Catalyst') && r.daysOpen > 90);
+                    if (oldCatalyst) {
+                        degradationPenalty = 14.5; // Penalize yield for old catalyst
+                    }
+
+                    // 2. Scale Variance
+                    if (targetMass > 1000) {
+                        scalePenalty = 8.0; // Penalize yield for thermal/mixing issues at > 1g scale
+                    } else if (targetMass > 500) {
+                        scalePenalty = 3.5;
+                    }
+
+                    const finalYield = baseYield - degradationPenalty - scalePenalty;
+                    
+                    setExpectedYield(finalYield);
+                    setMlInsights({ baseYield, degradationPenalty, scalePenalty });
                     setIsPredicting(false);
-                }, 1200);
+                }, 1500);
             };
 
             const scaleToLimit = (reagent) => {
-                // Calculate max target product we can make based on this limiting reagent
                 const maxTargetMoles = (reagent.inStockMg / reagent.mw) / reagent.eq;
                 const newTargetMass = maxTargetMoles * productMW * (expectedYield / 100);
                 setTargetMass(newTargetMass);
+                setExportToken(null);
+            };
+
+            const exportToELN = () => {
+                setIsExporting(true);
+                setTimeout(() => {
+                    setIsExporting(false);
+                    setExportToken(`ELN-POST-SUCCESS: BATCH-${Math.floor(Math.random() * 100000)}`);
+                }, 1200);
             };
 
             return (
-                <div className="max-w-2xl mx-auto p-4 flex flex-col gap-6">
+                <div className="max-w-2xl mx-auto p-4 flex flex-col gap-6 pb-20">
                     <header className="flex justify-between py-4 items-center border-b border-slate-200 dark:border-slate-800">
                         <div>
                             <h1 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">SynthScale AI</h1>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Predictive Yield & Inventory Intercept</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Enterprise Middleware v2.0</p>
                         </div>
                         <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">
                             {darkMode ? '☀️' : '🌙'}
                         </button>
                     </header>
 
-                    {/* Step 1: Target & Prediction */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
-                        <div className="flex justify-between items-center mb-2">
-                            <h2 className="text-sm font-bold text-emerald-500 uppercase">Step 1: Reaction Target</h2>
-                            <button 
-                                onClick={simulateELNPrediction}
-                                className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all ${isPredicting ? 'bg-amber-100 text-amber-600' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-200'}`}
-                            >
-                                {isPredicting ? 'Scanning ELN History...' : '✨ Predict Yield via ELN'}
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Mass (mg)</label>
-                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg font-bold text-blue-600 dark:text-blue-400" value={targetMass.toFixed(1)} onChange={(e) => setTargetMass(Number(e.target.value))} />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Yield (%)</label>
-                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg" value={expectedYield} onChange={(e) => setExpectedYield(Number(e.target.value))} />
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Product MW</label>
-                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg" value={productMW} onChange={(e) => setProductMW(Number(e.target.value))} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Step 2: Auto-Scaled Reagents with Inventory Check */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
-                        <h2 className="text-sm font-bold text-emerald-500 uppercase mb-4">Step 2: Inventory-Aware Scaling</h2>
-                        
-                        <div className="space-y-4">
-                            {reagents.map(r => {
-                                const reqMass = targetMoles * r.eq * r.mw;
-                                const isShort = reqMass > r.inStockMg;
-                                
-                                return (
-                                    <div key={r.id} className={`p-4 rounded-2xl ring-2 transition-all ${isShort ? 'bg-rose-50 dark:bg-rose-900/10 ring-rose-400 dark:ring-rose-500' : 'bg-slate-50 dark:bg-slate-900 ring-slate-200 dark:ring-slate-700'}`}>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="font-bold text-md">{r.name}</div>
-                                                <div className="text-xs text-slate-500 font-mono mt-1">MW: {r.mw} | EQ: {r.eq}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Required Mass</div>
-                                                <div className={`text-xl font-black font-mono ${isShort ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                                                    {reqMass.toFixed(1)} mg
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Inventory Status Bar */}
-                                        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/50 flex justify-between items-center">
-                                            <div className="flex items-center gap-2 text-xs font-bold font-mono">
-                                                <span className="text-slate-400 uppercase">In Stock:</span>
-                                                <span className={isShort ? 'text-rose-500' : 'text-emerald-500'}>{r.inStockMg.toFixed(1)} mg</span>
-                                            </div>
-                                            {isShort && (
-                                                <button 
-                                                    onClick={() => scaleToLimit(r)}
-                                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-lg shadow-md transition-colors"
-                                                >
-                                                    Scale to Max Stock
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<SynthScaleApp />);
-    </script>
-</body>
-</html>
+                    {/* Step 1: Target & Context-Aware Prediction */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-
+        
