@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoYield Pro | Synthetic Chemist Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans text-slate-900 dark:text-slate-100">
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function AutoYieldApp() {
+            const [darkMode, setDarkMode] = useState(true);
+            const [targetMass, setTargetMass] = useState(500); // in mg
+            const [expectedYield, setExpectedYield] = useState(75); // percentage
+            const [productMW, setProductMW] = useState(350.5); // g/mol
+            
+            const [reagents, setReagents] = useState([
+                { id: 1, name: 'Starting Material A', mw: 150.2, eq: 1.0, density: null },
+                { id: 2, name: 'Reagent B', mw: 98.0, eq: 1.5, density: null },
+                { id: 3, name: 'Catalyst (Liquid)', mw: 120.1, eq: 0.1, density: 1.15 }
+            ]);
+
+            useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); }, [darkMode]);
+
+            // Core Math Calculation
+            const theoreticalMassNeeded = targetMass / (expectedYield / 100);
+            const targetMoles = theoreticalMassNeeded / productMW; // in mmol
+
+            const updateReagent = (id, field, value) => {
+                setReagents(reagents.map(r => r.id === id ? { ...r, [field]: parseFloat(value) || 0 } : r));
+            };
+
+            const addReagent = () => {
+                setReagents([...reagents, { id: Date.now(), name: 'New Reagent', mw: 100, eq: 1.0, density: null }]);
+            };
+
+            return (
+                <div className="max-w-2xl mx-auto p-4 flex flex-col gap-6">
+                    <header className="flex justify-between py-4 items-center border-b border-slate-200 dark:border-slate-800">
+                        <div>
+                            <h1 className="text-2xl font-black text-indigo-600 dark:text-indigo-400 tracking-tight">AutoYield Pro</h1>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reverse Stoichiometry Engine</p>
+                        </div>
+                        <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">
+                            {darkMode ? '☀️' : '🌙'}
+                        </button>
+                    </header>
+
+                    {/* Target Product Inputs */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                        <h2 className="text-sm font-bold text-indigo-500 uppercase">Step 1: Define Target Product</h2>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Mass (mg)</label>
+                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg" value={targetMass} onChange={(e) => setTargetMass(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Expected Yield (%)</label>
+                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg" value={expectedYield} onChange={(e) => setExpectedYield(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Product MW</label>
+                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg" value={productMW} onChange={(e) => setProductMW(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Reagent Calculations */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-sm font-bold text-indigo-500 uppercase">Step 2: Auto-Scaled Reagents</h2>
+                            <button onClick={addReagent} className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg">+ Add Reagent</button>
+                        </div>
+                        
+                        <div className="space-y-3">
+                            {reagents.map(r => {
+                                const massMg = targetMoles * r.eq * r.mw;
+                                const volUL = r.density ? massMg / r.density : null;
+                                
+                                return (
+                                    <div key={r.id} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl ring-1 ring-slate-200 dark:ring-slate-700 flex flex-col gap-3">
+                                        <div className="flex justify-between items-center">
+                                            <input type="text" className="bg-transparent font-bold text-lg outline-none w-1/2" defaultValue={r.name} />
+                                            <div className="text-right">
+                                                <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{massMg.toFixed(1)} <span className="text-sm">mg</span></div>
+                                                {volUL && <div className="text-sm font-bold text-blue-500 font-mono">{volUL.toFixed(1)} µL</div>}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-400 font-bold uppercase">MW</span>
+                                                <input type="number" className="w-20 bg-transparent outline-none font-mono border-b border-slate-300 dark:border-slate-600" value={r.mw} onChange={(e) => updateReagent(r.id, 'mw', e.target.value)} />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-400 font-bold uppercase">EQ</span>
+                                                <input type="number" step="0.1" className="w-16 bg-transparent outline-none font-mono border-b border-slate-300 dark:border-slate-600" value={r.eq} onChange={(e) => updateReagent(r.id, 'eq', e.target.value)} />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-400 font-bold uppercase">d (g/mL)</span>
+                                                <input type="number" step="0.01" className="w-16 bg-transparent outline-none font-mono border-b border-slate-300 dark:border-slate-600" value={r.density || ''} placeholder="-" onChange={(e) => updateReagent(r.id, 'density', e.target.value)} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AutoYieldApp />);
+    </script>
+</body>
+</html>
