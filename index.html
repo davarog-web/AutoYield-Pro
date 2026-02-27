@@ -97,5 +97,22 @@
                     </header>
 
                     {/* Step 1: Target & Context-Aware Prediction */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-
-        
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h2 className="text-sm font-bold text-emerald-500 uppercase">Step 1: ML Yield Prediction</h2>
+                            <button 
+                                onClick={predictYield}
+                                className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm ${isPredicting ? 'bg-amber-100 text-amber-600' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}
+                            >
+                                {isPredicting ? 'Analyzing Context...' : '✨ Run ML Prediction Engine'}
+                            </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Mass (mg)</label>
+                                <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg font-bold text-blue-600 dark:text-blue-400" value={targetMass.toFixed(1)} onChange={(e) => { setTargetMass(Number(e.target.value)); setMlInsights(null); }} />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Predicted Yield (%)</label>
+                                <div className={`w-full p-3 rounded-xl ring-1 font-mono text
