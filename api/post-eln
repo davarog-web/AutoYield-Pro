@@ -1,0 +1,24 @@
+export default async function handler(req, res) {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+
+    const { tenant, key, payload } = req.body;
+
+    try {
+        const benchlingRes = await fetch(`https://${tenant}/api/v2/entries`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Basic ' + Buffer.from(key + ':').toString('base64'),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!benchlingRes.ok) throw new Error(`Benchling rejected the post: ${benchlingRes.status}`);
+        
+        const data = await benchlingRes.json();
+        return res.status(200).json(data);
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
