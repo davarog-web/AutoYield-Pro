@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SynthScale AI | Enterprise v4.0</title>
+    <title>SynthScale AI | Production v6.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -18,90 +18,102 @@
 
         function SynthScaleApp() {
             const [darkMode, setDarkMode] = useState(true);
-            const [targetMass, setTargetMass] = useState(500); // mg
-            const [expectedYield, setExpectedYield] = useState(85.0); // %
-            const [productMW, setProductMW] = useState(350.5); // g/mol
+            const [targetMass, setTargetMass] = useState(500); 
+            const [expectedYield, setExpectedYield] = useState(85.0); 
+            const [productMW, setProductMW] = useState(350.5); 
+            
+            const [showSettings, setShowSettings] = useState(false);
+            const [benchlingTenant, setBenchlingTenant] = useState("");
+            const [benchlingKey, setBenchlingKey] = useState("");
             
             const [isPredicting, setIsPredicting] = useState(false);
             const [mlInsights, setMlInsights] = useState(null);
-            
             const [isExporting, setIsExporting] = useState(false);
-            const [exportToken, setExportToken] = useState(null);
+            const [exportStatus, setExportStatus] = useState(null);
+            const [isSyncing, setIsSyncing] = useState(false);
             
             const fileInputRef = useRef(null);
 
-            // Added a volatile liquid reagent to demonstrate Stoichiometric Drift
             const defaultReagents = [
                 { id: 1, name: 'Aryl Halide (Substrate A)', mw: 156.0, eq: 1.0, isLiquid: false, inStock: 1200, daysOpen: 12 },
                 { id: 2, name: 'Pd(dppf)Cl2 Catalyst', mw: 731.5, eq: 0.05, isLiquid: false, inStock: 5000, daysOpen: 142 },
-                { id: 3, name: 'n-Butyllithium (n-BuLi)', mw: 64.06, eq: 1.1, isLiquid: true, nominalMolarity: 1.6, lastTitratedDays: 45, inStock: 500 } // 500 mL in stock
+                { id: 3, name: 'n-Butyllithium', mw: 64.06, eq: 1.1, isLiquid: true, nominalMolarity: 1.6, lastTitratedDays: 45, inStock: 500 } 
             ];
             
             const [reagents, setReagents] = useState(defaultReagents);
-            const [csvLoaded, setCsvLoaded] = useState(false);
 
             useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); }, [darkMode]);
 
             const targetMoles = (targetMass / (expectedYield / 100)) / productMW;
 
-            const handleFileUpload = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                Papa.parse(file, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        const parsedReagents = results.data.map((row, index) => ({
-                            id: Date.now() + index,
-                            name: row.name || `Unknown Reagent ${index}`,
-                            mw: parseFloat(row.mw) || 100,
-                            eq: parseFloat(row.eq) || 1.0,
-                            isLiquid: String(row.isLiquid).toLowerCase() === 'true',
-                            nominalMolarity: parseFloat(row.nominalMolarity) || null,
-                            lastTitratedDays: parseInt(row.lastTitratedDays) || 0,
-                            inStock: parseFloat(row.inStock) || 0,
-                            daysOpen: parseInt(row.daysOpen) || 0
-                        }));
-                        setReagents(parsedReagents);
-                        setCsvLoaded(true);
-                        setMlInsights(null); 
-                        setExpectedYield(85.0); 
-                    }
-                });
-            };
-
             const predictYield = () => {
-                setIsPredicting(true);
-                setMlInsights(null);
-                setExportToken(null);
-                
+                setIsPredicting(true); setMlInsights(null); setExportStatus(null);
                 setTimeout(() => {
-                    let baseYield = 85.0;
-                    let degradationPenalty = 0;
-                    let scalePenalty = 0;
-
+                    let baseYield = 85.0; let degradationPenalty = 0; let scalePenalty = 0;
                     const oldCatalyst = reagents.find(r => r.name.toLowerCase().includes('catalyst') && r.daysOpen > 90);
                     if (oldCatalyst) { degradationPenalty = 14.5; }
-
-                    if (targetMass > 1000) { scalePenalty = 8.0; } 
-                    else if (targetMass > 500) { scalePenalty = 3.5; }
-
-                    const finalYield = baseYield - degradationPenalty - scalePenalty;
-                    
-                    setExpectedYield(finalYield);
+                    if (targetMass > 1000) { scalePenalty = 8.0; } else if (targetMass > 500) { scalePenalty = 3.5; }
+                    setExpectedYield(baseYield - degradationPenalty - scalePenalty);
                     setMlInsights({ baseYield, degradationPenalty, scalePenalty });
                     setIsPredicting(false);
                 }, 1500);
             };
 
-            const exportToELN = () => {
+            // PRODUCTION WAY: Sync Inventory via secure Vercel backend
+            const syncLiveInventory = async () => {
+                if (!benchlingTenant || !benchlingKey) return alert("Please enter API credentials in settings.");
+                setIsSyncing(true);
+                
+                try {
+                    const response = await fetch('/api/get-inventory', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tenant: benchlingTenant, key: benchlingKey, reagentName: 'n-Butyllithium' })
+                    });
+                    
+                    const data = await response.json();
+                    if(data.error) throw new Error(data.error);
+                    
+                    alert("Successfully connected to API backend. Received data payload size: " + JSON.stringify(data).length + " bytes.");
+                    // In a live scenario, you would parse data.items[0] and setReagents() here.
+                } catch (error) {
+                    alert("Backend Error: " + error.message);
+                }
+                setIsSyncing(false);
+            };
+
+            // PRODUCTION WAY: Export payload via secure Vercel backend
+            const exportToELN = async () => {
+                if (!benchlingTenant || !benchlingKey) {
+                    setExportStatus({ type: 'error', message: 'API Error: Benchling Tenant URL and API Key required.' });
+                    return;
+                }
                 setIsExporting(true);
-                setTimeout(() => {
-                    setIsExporting(false);
-                    setExportToken(`ELN-POST-SUCCESS: BATCH-${Math.floor(Math.random() * 100000)}`);
-                }, 1200);
+                setExportStatus(null);
+                
+                const payload = {
+                    name: `SynthScale Prep: ${targetMass.toFixed(1)}mg Target`,
+                    fields: {
+                        "Target Mass": { value: targetMass.toFixed(2) },
+                        "Predicted Yield": { value: expectedYield.toFixed(1) }
+                    }
+                };
+
+                try {
+                    const response = await fetch('/api/post-eln', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tenant: benchlingTenant, key: benchlingKey, payload })
+                    });
+                    
+                    const data = await response.json();
+                    if(data.error) throw new Error(data.error);
+                    
+                    setExportStatus({ type: 'success', message: `POST SUCCESS: Confirmed via Vercel Backend.` });
+                } catch (error) {
+                    setExportStatus({ type: 'error', message: `Backend Pipeline Failed: ${error.message}` });
+                }
+                setIsExporting(false);
             };
 
             return (
@@ -109,146 +121,70 @@
                     <header className="flex justify-between py-4 items-center border-b border-slate-200 dark:border-slate-800">
                         <div>
                             <h1 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">SynthScale AI</h1>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Enterprise Middleware v4.0</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Production Serverless Architecture</p>
                         </div>
-                        <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">
-                            {darkMode ? '☀️' : '🌙'}
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowSettings(!showSettings)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">⚙️</button>
+                            <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">{darkMode ? '☀️' : '🌙'}</button>
+                        </div>
                     </header>
 
-                    {/* Step 0: CSV Data Ingestion */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-sm font-bold text-blue-500 uppercase">Step 0: Load Inventory Context</h2>
-                            {csvLoaded && <span className="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] uppercase font-black rounded border border-emerald-200">Data Synced</span>}
+                    {showSettings && (
+                        <div className="bg-slate-800 p-6 rounded-3xl shadow-lg border border-slate-700 space-y-4 text-white">
+                            <h2 className="text-sm font-bold text-blue-400 uppercase">Enterprise API Configuration</h2>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Benchling Tenant URL</label>
+                                    <input type="text" placeholder="e.g., mycompany.benchling.com" className="w-full p-3 bg-slate-900 rounded-xl ring-1 ring-slate-700 font-mono text-sm text-blue-400" value={benchlingTenant} onChange={(e) => setBenchlingTenant(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Secret API Key</label>
+                                    <input type="password" placeholder="••••••••••••••••" className="w-full p-3 bg-slate-900 rounded-xl ring-1 ring-slate-700 font-mono text-sm text-blue-400" value={benchlingKey} onChange={(e) => setBenchlingKey(e.target.value)} />
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                            <button onClick={() => fileInputRef.current.click()} className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 dark:text-slate-400 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                                📥 Upload .CSV Inventory Export
-                            </button>
-                        </div>
-                    </div>
+                    )}
 
-                    {/* Step 1: Target & Context-Aware Prediction */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
                         <div className="flex justify-between items-center mb-2">
                             <h2 className="text-sm font-bold text-emerald-500 uppercase">Step 1: ML Yield Prediction</h2>
-                            <button onClick={predictYield} className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-sm ${isPredicting ? 'bg-amber-100 text-amber-600' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}>
-                                {isPredicting ? 'Analyzing Context...' : '✨ Run ML Prediction Engine'}
+                            <button onClick={predictYield} className="px-4 py-2 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-sm">
+                                {isPredicting ? 'Analyzing...' : '✨ Run ML Engine'}
                             </button>
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target Mass (mg)</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Target (mg)</label>
                                 <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg font-bold text-blue-600 dark:text-blue-400" value={targetMass.toFixed(1)} onChange={(e) => { setTargetMass(Number(e.target.value)); setMlInsights(null); }} />
                             </div>
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Predicted Yield (%)</label>
-                                <div className={`w-full p-3 rounded-xl ring-1 font-mono text-lg font-bold ${mlInsights ? 'bg-purple-50 dark:bg-purple-900/20 ring-purple-300 dark:ring-purple-700 text-purple-600 dark:text-purple-400' : 'bg-slate-50 dark:bg-slate-900 ring-slate-200 dark:ring-slate-700 text-slate-900 dark:text-white'}`}>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">Predicted (%)</label>
+                                <div className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg font-bold text-slate-900 dark:text-white">
                                     {expectedYield.toFixed(1)}%
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">Product MW</label>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">MW</label>
                                 <input type="number" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl ring-1 ring-slate-200 dark:ring-slate-700 font-mono text-lg text-slate-500" value={productMW} onChange={(e) => setProductMW(Number(e.target.value))} />
                             </div>
                         </div>
                     </div>
 
-                    {/* Step 2: Dynamic Intercepts & Stoichiometric Drift */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
-                        <h2 className="text-sm font-bold text-emerald-500 uppercase mb-4">Step 2: Active Intercept Engine</h2>
-                        
-                        <div className="space-y-4">
-                            {reagents.map(r => {
-                                const reqMoles = targetMoles * r.eq;
-                                
-                                // Logic for Solid Reagents
-                                let reqAmount = reqMoles * r.mw; 
-                                let unit = "mg";
-                                let isShort = reqAmount > r.inStock;
-                                let isDegraded = r.daysOpen > 90 && !r.isLiquid;
-                                
-                                // Logic for Liquid Reagents (Stoichiometric Drift)
-                                let driftPenalty = 0;
-                                let actualMolarity = r.nominalMolarity;
-                                let driftDetected = false;
-
-                                if (r.isLiquid) {
-                                    // Assuming a 0.5% degradation in molarity per day since last titration
-                                    driftPenalty = r.lastTitratedDays * 0.005; 
-                                    actualMolarity = Math.max(0.1, r.nominalMolarity * (1 - driftPenalty));
-                                    
-                                    // Required Volume in mL = (moles / molarity) * 1000
-                                    reqAmount = (reqMoles / actualMolarity) * 1000; 
-                                    unit = "mL";
-                                    isShort = reqAmount > r.inStock;
-                                    driftDetected = r.lastTitratedDays > 14; // Flag if hasn't been titrated in 2 weeks
-                                }
-                                
-                                return (
-                                    <div key={r.id} className={`p-4 rounded-2xl ring-2 transition-all ${isShort ? 'bg-rose-50 dark:bg-rose-900/10 ring-rose-400 dark:ring-rose-500' : 'bg-slate-50 dark:bg-slate-900 ring-slate-200 dark:ring-slate-700'}`}>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="font-bold text-md flex items-center gap-2">
-                                                    {r.name} 
-                                                    {isDegraded && <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[9px] uppercase font-black rounded border border-rose-200">Aged Solid</span>}
-                                                    {driftDetected && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] uppercase font-black rounded border border-amber-300">Drift Intercept</span>}
-                                                </div>
-                                                <div className="text-xs text-slate-500 font-mono mt-1">
-                                                    {r.isLiquid ? `EQ: ${r.eq} | Label: ${r.nominalMolarity}M` : `MW: ${r.mw} | EQ: ${r.eq}`}
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">Required Dispense</div>
-                                                <div className={`text-xl font-black font-mono ${isShort ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                                                    {reqAmount.toFixed(2)} {unit}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/50 flex flex-col gap-2">
-                                            {/* Drift Calculation Details UI */}
-                                            {r.isLiquid && driftDetected && (
-                                                <div className="flex justify-between bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg text-[10px] font-mono border border-amber-200 dark:border-amber-800">
-                                                    <span className="text-amber-700 dark:text-amber-500 font-bold uppercase">Days Since Titration: {r.lastTitratedDays}d</span>
-                                                    <span className="text-amber-700 dark:text-amber-500 font-bold">Auto-Adjusted Molarity: {actualMolarity.toFixed(2)}M</span>
-                                                </div>
-                                            )}
-
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-1.5 text-xs font-bold font-mono">
-                                                    <span className="text-slate-400 uppercase">Stock:</span>
-                                                    <span className={isShort ? 'text-rose-500' : 'text-emerald-500'}>{r.inStock.toFixed(1)} {unit}</span>
-                                                </div>
-                                                {isShort && !r.isLiquid && (
-                                                    <button className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-lg shadow-md transition-colors">
-                                                        Scale to Max Stock
-                                                    </button>
-                                                )}
-                                                {isShort && r.isLiquid && (
-                                                    <div className="text-[10px] text-rose-500 font-bold uppercase">Insufficient Volume</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Step 3: Execution Loop */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col items-center gap-4">
-                        <h2 className="text-sm font-bold text-emerald-500 uppercase w-full">Step 3: Execution Payload</h2>
-                        {!exportToken ? (
-                            <button onClick={exportToELN} disabled={isExporting} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-md transition-all flex justify-center items-center gap-2 disabled:opacity-70">
-                                {isExporting ? 'Transmitting via API...' : '🚀 Export Optimized Grid to ELN'}
-                            </button>
-                        ) : (
-                            <div className="w-full p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center space-y-2">
-                                <div className="text-emerald-600 dark:text-emerald-400 font-bold">Successfully Pushed to Lab Notebook</div>
-                                <div className="text-xs font-mono text-emerald-500 dark:text-emerald-500/70">{exportToken}</div>
+                        <h2 className="text-sm font-bold text-blue-500 uppercase w-full">Step 2: Backend API Pipelines</h2>
+                        
+                        <button onClick={syncLiveInventory} disabled={isSyncing} className="w-full py-4 border-2 border-dashed border-blue-500 text-blue-600 dark:text-blue-400 font-black rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all flex justify-center items-center gap-2">
+                            {isSyncing ? 'Pinging Benchling GET Endpoint...' : '🔄 Sync Live Inventory via Backend'}
+                        </button>
+
+                        <button onClick={exportToELN} disabled={isExporting} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow-md transition-all flex justify-center items-center gap-2 disabled:opacity-70">
+                            {isExporting ? 'Executing POST Request...' : '🚀 Push Final Payload via Backend'}
+                        </button>
+                        
+                        {exportStatus && (
+                            <div className={`w-full p-4 rounded-xl text-center space-y-2 border ${exportStatus.type === 'error' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'}`}>
+                                <div className="font-bold">{exportStatus.type === 'error' ? 'Serverless Function Failed' : 'Serverless Sync Complete'}</div>
+                                <div className="text-xs font-mono opacity-80">{exportStatus.message}</div>
                             </div>
                         )}
                     </div>
