@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SynthScale AI | Enterprise v2.0</title>
+    <title>SynthScale AI | Enterprise v3.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script>tailwind.config = { darkMode: 'class' }</script>
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans text-slate-900 dark:text-slate-100">
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         function SynthScaleApp() {
             const [darkMode, setDarkMode] = useState(true);
@@ -27,16 +28,47 @@
             const [isExporting, setIsExporting] = useState(false);
             const [exportToken, setExportToken] = useState(null);
             
-            // Added 'daysOpen' to demonstrate the reagent degradation ML variable
-            const [reagents, setReagents] = useState([
+            const fileInputRef = useRef(null);
+
+            // Default fallback reagents if no CSV is loaded
+            const defaultReagents = [
                 { id: 1, name: 'Aryl Halide (Substrate A)', mw: 156.0, eq: 1.0, inStockMg: 1200, daysOpen: 12 },
                 { id: 2, name: 'Boronic Acid (Substrate B)', mw: 121.9, eq: 1.2, inStockMg: 450, daysOpen: 45 },
-                { id: 3, name: 'Pd(dppf)Cl2 Catalyst', mw: 731.5, eq: 0.05, inStockMg: 5000, daysOpen: 142 } // Heavily degraded
-            ]);
+                { id: 3, name: 'Pd(dppf)Cl2 Catalyst', mw: 731.5, eq: 0.05, inStockMg: 5000, daysOpen: 142 }
+            ];
+            
+            const [reagents, setReagents] = useState(defaultReagents);
+            const [csvLoaded, setCsvLoaded] = useState(false);
 
             useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); }, [darkMode]);
 
             const targetMoles = (targetMass / (expectedYield / 100)) / productMW;
+
+            // --- CSV UPLOAD HANDLER ---
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                Papa.parse(file, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        const parsedReagents = results.data.map((row, index) => ({
+                            id: Date.now() + index,
+                            name: row.name || `Unknown Reagent ${index}`,
+                            mw: parseFloat(row.mw) || 100,
+                            eq: parseFloat(row.eq) || 1.0,
+                            inStockMg: parseFloat(row.inStockMg) || 0,
+                            daysOpen: parseInt(row.daysOpen) || 0
+                        }));
+                        setReagents(parsedReagents);
+                        setCsvLoaded(true);
+                        setMlInsights(null); // Reset insights for new data
+                        setExpectedYield(85.0); // Reset base yield
+                    }
+                });
+            };
 
             const predictYield = () => {
                 setIsPredicting(true);
@@ -48,15 +80,13 @@
                     let degradationPenalty = 0;
                     let scalePenalty = 0;
 
-                    // 1. Context-Aware Reagent Degradation
-                    const oldCatalyst = reagents.find(r => r.name.includes('Catalyst') && r.daysOpen > 90);
+                    const oldCatalyst = reagents.find(r => r.name.toLowerCase().includes('catalyst') && r.daysOpen > 90);
                     if (oldCatalyst) {
-                        degradationPenalty = 14.5; // Penalize yield for old catalyst
+                        degradationPenalty = 14.5;
                     }
 
-                    // 2. Scale Variance
                     if (targetMass > 1000) {
-                        scalePenalty = 8.0; // Penalize yield for thermal/mixing issues at > 1g scale
+                        scalePenalty = 8.0; 
                     } else if (targetMass > 500) {
                         scalePenalty = 3.5;
                     }
@@ -89,12 +119,35 @@
                     <header className="flex justify-between py-4 items-center border-b border-slate-200 dark:border-slate-800">
                         <div>
                             <h1 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">SynthScale AI</h1>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Enterprise Middleware v2.0</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Enterprise Middleware v3.0</p>
                         </div>
                         <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full shadow-inner text-xl">
                             {darkMode ? '☀️' : '🌙'}
                         </button>
                     </header>
+
+                    {/* Step 0: CSV Data Ingestion */}
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-sm font-bold text-blue-500 uppercase">Step 0: Load Inventory Context</h2>
+                            {csvLoaded && <span className="px-2 py-1 bg-emerald-100 text-emerald-600 text-[10px] uppercase font-black rounded border border-emerald-200">Data Synced</span>}
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <input 
+                                type="file" 
+                                accept=".csv" 
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                className="hidden" 
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current.click()}
+                                className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 dark:text-slate-400 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                📥 Upload .CSV Inventory Export
+                            </button>
+                        </div>
+                    </div>
 
                     {/* Step 1: Target & Context-Aware Prediction */}
                     <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
@@ -125,7 +178,6 @@
                             </div>
                         </div>
 
-                        {/* ML Insights Panel - Visually demonstrates patent claims */}
                         {mlInsights && (
                             <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-mono">
                                 <div className="text-slate-500 mb-2 font-bold uppercase tracking-wider text-[10px]">ML Model Execution Log</div>
@@ -145,7 +197,7 @@
                             {reagents.map(r => {
                                 const reqMass = targetMoles * r.eq * r.mw;
                                 const isShort = reqMass > r.inStockMg;
-                                const isDegraded = r.daysOpen > 90;
+                                const isDegraded = r.daysOpen > 90 && r.name.toLowerCase().includes('catalyst');
                                 
                                 return (
                                     <div key={r.id} className={`p-4 rounded-2xl ring-2 transition-all ${isShort ? 'bg-rose-50 dark:bg-rose-900/10 ring-rose-400 dark:ring-rose-500' : 'bg-slate-50 dark:bg-slate-900 ring-slate-200 dark:ring-slate-700'}`}>
