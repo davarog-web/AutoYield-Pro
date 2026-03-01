@@ -43,7 +43,9 @@
             const [reagents, setReagents] = useState(defaultReagents);
             const [csvLoaded, setCsvLoaded] = useState(false);
 
-            useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); }, [darkMode]);
+            useEffect(() => { 
+                document.documentElement.classList.toggle('dark', darkMode); 
+            }, [darkMode]);
 
             const targetMoles = (targetMass / (expectedYield / 100)) / productMW;
 
@@ -57,21 +59,30 @@
                         const parsedReagents = results.data.map((row, index) => ({
                             id: Date.now() + index,
                             name: row.name || `Unknown Reagent ${index}`,
-                            mw: parseFloat(row.mw) || 100, eq: parseFloat(row.eq) || 1.0,
+                            mw: parseFloat(row.mw) || 100, 
+                            eq: parseFloat(row.eq) || 1.0,
                             isLiquid: String(row.isLiquid).toLowerCase() === 'true',
                             nominalMolarity: parseFloat(row.nominalMolarity) || null,
                             lastTitratedDays: parseInt(row.lastTitratedDays) || 0,
-                            inStock: parseFloat(row.inStock) || 0, daysOpen: parseInt(row.daysOpen) || 0
+                            inStock: parseFloat(row.inStock) || 0, 
+                            daysOpen: parseInt(row.daysOpen) || 0
                         }));
-                        setReagents(parsedReagents); setCsvLoaded(true); setMlInsights(null); setExpectedYield(85.0); 
+                        setReagents(parsedReagents); 
+                        setCsvLoaded(true); 
+                        setMlInsights(null); 
+                        setExpectedYield(85.0); 
                     }
                 });
             };
 
             const predictYield = () => {
-                setIsPredicting(true); setMlInsights(null); setExportStatus(null);
+                setIsPredicting(true); 
+                setMlInsights(null); 
+                setExportStatus(null);
                 setTimeout(() => {
-                    let baseYield = 85.0; let degradationPenalty = 0; let scalePenalty = 0;
+                    let baseYield = 85.0; 
+                    let degradationPenalty = 0; 
+                    let scalePenalty = 0;
                     const oldCatalyst = reagents.find(r => r.name.toLowerCase().includes('catalyst') && r.daysOpen > 90);
                     if (oldCatalyst) { degradationPenalty = 14.5; }
                     if (targetMass > 1000) { scalePenalty = 8.0; } else if (targetMass > 500) { scalePenalty = 3.5; }
@@ -86,13 +97,16 @@
                 setIsSyncing(true);
                 try {
                     const response = await fetch('/api/get-inventory', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tenant: benchlingTenant, key: benchlingKey, reagentName: 'n-Butyllithium' })
                     });
                     const data = await response.json();
                     if(data.error) throw new Error(data.error);
                     alert("Successfully connected to API backend. Received data payload size: " + JSON.stringify(data).length + " bytes.");
-                } catch (error) { alert("Backend Error: " + error.message); }
+                } catch (error) { 
+                    alert("Backend Error: " + error.message); 
+                }
                 setIsSyncing(false);
             };
 
@@ -101,7 +115,8 @@
                     setExportStatus({ type: 'error', message: 'API Error: Benchling Tenant URL and API Key required.' });
                     return;
                 }
-                setIsExporting(true); setExportStatus(null);
+                setIsExporting(true); 
+                setExportStatus(null);
                 
                 const payload = {
                     name: `SynthScale Prep: ${targetMass.toFixed(1)}mg Target`,
@@ -110,13 +125,16 @@
 
                 try {
                     const response = await fetch('/api/post-eln', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tenant: benchlingTenant, key: benchlingKey, payload })
                     });
                     const data = await response.json();
                     if(data.error) throw new Error(data.error);
                     setExportStatus({ type: 'success', message: `POST SUCCESS: Confirmed via Vercel Backend.` });
-                } catch (error) { setExportStatus({ type: 'error', message: `Backend Pipeline Failed: ${error.message}` }); }
+                } catch (error) { 
+                    setExportStatus({ type: 'error', message: `Backend Pipeline Failed: ${error.message}` }); 
+                }
                 setIsExporting(false);
             };
 
@@ -199,7 +217,9 @@
                                 let unit = "mg";
                                 let isShort = reqAmount > r.inStock;
                                 let isDegraded = r.daysOpen > 90 && !r.isLiquid;
-                                let driftPenalty = 0; let actualMolarity = r.nominalMolarity; let driftDetected = false;
+                                let driftPenalty = 0; 
+                                let actualMolarity = r.nominalMolarity; 
+                                let driftDetected = false;
 
                                 if (r.isLiquid) {
                                     driftPenalty = r.lastTitratedDays * 0.005; 
@@ -267,4 +287,23 @@
                             {isSyncing ? 'Pinging GET Endpoint...' : '🔄 Sync Live Inventory via Backend'}
                         </button>
 
-                        <button onClick={exportToELN} disabled={isExporting} classN
+                        <button onClick={exportToELN} disabled={isExporting} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow-md transition-all flex justify-center items-center gap-2 disabled:opacity-70">
+                            {isExporting ? 'Executing POST Request...' : '🚀 Push Final Payload via Backend'}
+                        </button>
+                        
+                        {exportStatus && (
+                            <div className={`w-full p-4 rounded-xl text-center space-y-2 border ${exportStatus.type === 'error' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'}`}>
+                                <div className="font-bold">{exportStatus.type === 'error' ? 'Serverless Function Failed' : 'Serverless Sync Complete'}</div>
+                                <div className="text-xs font-mono opacity-80">{exportStatus.message}</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SynthScaleApp />);
+    </script>
+</body>
+</html>
+                   
